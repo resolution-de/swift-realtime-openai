@@ -80,7 +80,14 @@ public final class WebSocketConnector: NSObject, RealtimeConnector, Sendable {
 	}
 
 	deinit {
-		self.disconnect()
+		// disconnect() is @MainActor-isolated and cannot be called from a
+		// nonisolated deinit. Do the equivalent non-isolated cleanup inline.
+		// If disconnect() already ran (the normal path), these calls are
+		// idempotent no-ops.
+		statusStream.finish()
+		webSocket.cancel(with: .goingAway, reason: nil)
+		task.cancel()
+		stream.finish()
 	}
 
 	package static func create(connectingTo request: URLRequest) async throws -> WebSocketConnector {
@@ -92,6 +99,7 @@ public final class WebSocketConnector: NSObject, RealtimeConnector, Sendable {
 		try await webSocket.send(message)
 	}
 
+	@MainActor
 	package func disconnect() {
 		statusStream.yield(.disconnected)
 		statusStream.finish()

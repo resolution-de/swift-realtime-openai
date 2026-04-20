@@ -69,7 +69,12 @@ import FoundationNetworking
 	}
 
 	deinit {
-		disconnect()
+		// Cannot touch @MainActor state (`status`) from nonisolated deinit.
+		// Do non-isolated cleanup only. If disconnect() already ran (the normal
+		// path), these calls are idempotent no-ops.
+		connection.close()
+		stream.finish()
+		statusStream.finish()
 	}
 
 	package func connect(using request: URLRequest, configuration: SessionConfiguration? = nil) async throws {
@@ -92,12 +97,11 @@ import FoundationNetworking
 		try dataChannel.sendData(LKRTCDataBuffer(data: encoder.encode(event), isBinary: false))
 	}
 
+	@MainActor
 	package func disconnect() {
-		Task { @MainActor in
-			status = .disconnected
-			statusStream.yield(.disconnected)
-			statusStream.finish()
-		}
+		status = .disconnected
+		statusStream.yield(.disconnected)
+		statusStream.finish()
 		connection.close()
 		stream.finish()
 	}
