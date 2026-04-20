@@ -55,7 +55,13 @@ extension Session {
 			status: { client.status },
 			connect: { request in try await client.connect(using: request) },
 			send: { event in try client.send(event: event) },
-			disconnect: { client.disconnect() },
+			disconnect: {
+				// `client.disconnect()` is @MainActor-isolated. All callers of
+				// `Transport.disconnect` invoke it from MainActor (Session.disconnect()
+				// is @MainActor; Session.deinit uses MainActor.assumeIsolated), so we
+				// safely assume isolation here to satisfy the nonisolated closure type.
+				MainActor.assumeIsolated { client.disconnect() }
+			},
 			setMuted: { muted in client.audioTrack.isEnabled = !muted }
 		)
 	}
@@ -136,8 +142,10 @@ extension Session {
 				eventContinuation.finish(throwing: error)
 			}
 
-			func disconnect() {
-				connector?.disconnect()
+			func disconnect() async {
+				if let connector {
+					await MainActor.run { connector.disconnect() }
+				}
 				connector = nil
 				eventTask?.cancel()
 				statusTask?.cancel()

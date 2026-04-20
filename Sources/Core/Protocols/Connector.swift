@@ -10,6 +10,6 @@ package protocol RealtimeConnector: Sendable {
 
 	static func create(connectingTo request: URLRequest) async throws -> Self
 
-	func disconnect()
+	@MainActor func disconnect()
 	func send(event: ClientEvent) async throws
 }
